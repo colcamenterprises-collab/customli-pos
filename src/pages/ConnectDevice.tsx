@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { useState } from "react";
 import { saveDeviceConnection, type DeviceRole } from "@/lib/deviceConnection";
 
@@ -20,7 +21,7 @@ export default function ConnectDevice() {
       const base = apiBase.trim().replace(/\/$/, "");
       const response = await fetch(`${base}/api/pos/discounts`, {
         headers: { "x-pos-device-token": deviceToken.trim() },
-        credentials: "include",
+        credentials: Capacitor.isNativePlatform() ? "omit" : "include",
       });
       if (!response.ok) throw new Error(response.status === 401 ? "That connection code was not accepted." : `Connection failed (${response.status}).`);
       saveDeviceConnection({ apiBase: base, deviceToken: deviceToken.trim(), businessName: businessName.trim() || "Connected business", deviceName: deviceName.trim() || "POS device", role });
