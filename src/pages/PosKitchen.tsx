@@ -67,6 +67,7 @@ export default function PosKitchen() {
   const [orders, setOrders] = useState<any[]>([]);
   const [error, setError] = useState("");
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("customli_kitchen_sound") !== "off");
+  const [resetting, setResetting] = useState(false);
   const [, tick] = useState(0);
   const knownOrders = useRef<Set<string> | null>(null);
 
@@ -106,16 +107,20 @@ export default function PosKitchen() {
     if (next) chime();
   };
 
+  const patchStatus = async (order: any, status: "ready" | "completed", actor: string) => {
+    const response = await fetch(statusEndpoint(order), {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, actor }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || body?.blockers?.[0]?.message || "Could not update ticket");
+  };
+
   const updateStatus = async (order: any, status: "ready" | "completed") => {
     try {
-      const response = await fetch(statusEndpoint(order), {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, actor: "kitchen" }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || body?.blockers?.[0]?.message || "Could not update ticket");
+      await patchStatus(order, status, "kitchen");
       await load();
       return true;
     } catch (cause: any) {
@@ -131,21 +136,39 @@ export default function PosKitchen() {
   };
 
   const clearAllReady = async () => {
-    if (!window.confirm("Clear every ready ticket?")) return;
+    if (!window.confirm("Clear every ready ticket? Order and sales history will be kept.")) return;
     try {
-      for (const order of ready) {
-        const response = await fetch(statusEndpoint(order), {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "completed", actor: "kitchen_bulk_clear" }),
-        });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || body?.blockers?.[0]?.message || "Could not clear ready tickets");
-      }
+      for (const order of ready) await patchStatus(order, "completed", "kitchen_bulk_clear_ready");
       await load();
     } catch (cause: any) {
       setError(cause.message || "Could not clear ready tickets");
+    }
+  };
+
+  const clearEntireKitchen = async () => {
+    if (!orders.length || resetting) return;
+    const confirmed = window.confirm(
+      `CLEAR ALL ${orders.length} KITCHEN TICKETS?\n\nUse this only to recover the kitchen after an outage, closed period or unusable backlog. Sales, receipts and order history are NOT deleted. Tickets are closed as completed.`,
+    );
+    if (!confirmed) return;
+    const finalConfirmed = window.confirm("Final confirmation: close every visible kitchen ticket now?");
+    if (!finalConfirmed) return;
+
+    setResetting(true);
+    setError("");
+    try {
+      // Recovery deliberately jumps straight to completed. Publishing a transient
+      // ready state would cause customer displays/callouts to announce stale tickets.
+      for (const order of orders) {
+        await patchStatus(order, "completed", "kitchen_recovery_reset");
+      }
+      knownOrders.current = null;
+      await load();
+    } catch (cause: any) {
+      setError(`${cause.message || "Could not clear the kitchen queue"}. Some tickets may already have been closed; refresh and review the queue before retrying.`);
+      await load();
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -199,11 +222,11 @@ export default function PosKitchen() {
           ))}
         </ul>
         {isReady ? (
-          <button className="w-full rounded bg-neutral-900 p-3 font-bold text-white" onClick={() => updateStatus(order, "completed")}>
+          <button disabled={resetting} className="w-full rounded bg-neutral-900 p-3 font-bold text-white disabled:opacity-50" onClick={() => updateStatus(order, "completed")}>
             {completionLabel}
           </button>
         ) : (
-          <button className="w-full rounded bg-green-600 p-3 font-bold text-white" onClick={() => markReady(order)}>
+          <button disabled={resetting} className="w-full rounded bg-green-600 p-3 font-bold text-white disabled:opacity-50" onClick={() => markReady(order)}>
             {readyLabel}
           </button>
         )}
@@ -219,9 +242,16 @@ export default function PosKitchen() {
           <h1 className="text-3xl font-black">Kitchen tickets</h1>
           <p className="mt-1 text-sm text-neutral-500">Counter, Grab, online pickup, delivery and QR-table orders · live refresh every 3 seconds</p>
         </div>
-        <button onClick={toggleSound} className={`rounded-xl px-4 py-3 text-sm font-black ${soundEnabled ? "bg-green-600 text-white" : "bg-white text-neutral-700"}`}>
-          New-order sound: {soundEnabled ? "ON" : "OFF"}
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button onClick={toggleSound} disabled={resetting} className={`rounded-xl px-4 py-3 text-sm font-black disabled:opacity-50 ${soundEnabled ? "bg-green-600 text-white" : "bg-white text-neutral-700"}`}>
+            New-order sound: {soundEnabled ? "ON" : "OFF"}
+          </button>
+          {orders.length > 0 && (
+            <button onClick={clearEntireKitchen} disabled={resetting} className="rounded-xl bg-red-700 px-4 py-3 text-sm font-black text-white disabled:opacity-50">
+              {resetting ? "CLEARING…" : "CLEAR ALL KITCHEN"}
+            </button>
+          )}
+        </div>
       </div>
       {error && <p className="mb-4 rounded bg-red-50 p-3 font-bold text-red-700">{error}</p>}
 
@@ -238,7 +268,7 @@ export default function PosKitchen() {
             <p className="text-sm text-neutral-500">Collection, delivery and table orders stay here until handed over or dispatched.</p>
           </div>
           {ready.length > 0 && (
-            <button className="rounded border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700" onClick={clearAllReady}>
+            <button disabled={resetting} className="rounded border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700 disabled:opacity-50" onClick={clearAllReady}>
               Clear all ready
             </button>
           )}
