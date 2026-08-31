@@ -157,10 +157,9 @@ export default function PosKitchen() {
     setResetting(true);
     setError("");
     try {
+      // Recovery deliberately jumps straight to completed. Publishing a transient
+      // ready state would cause customer displays/callouts to announce stale tickets.
       for (const order of orders) {
-        if (order.status !== "ready") {
-          await patchStatus(order, "ready", "kitchen_recovery_reset");
-        }
         await patchStatus(order, "completed", "kitchen_recovery_reset");
       }
       knownOrders.current = null;
