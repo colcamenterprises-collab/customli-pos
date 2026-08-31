@@ -1,29 +1,25 @@
-import { useEffect, useState } from "react";
 import PosRegisterGate from "@/pages/PosRegisterGate";
 import PosKitchen from "@/pages/PosKitchen";
 import PosDisplay from "@/pages/PosDisplay";
-import PosShifts from "@/pages/PosShifts";
-import PrinterSettings from "@/pages/PrinterSettings";
 import ConnectDevice from "@/pages/ConnectDevice";
 import { getDeviceConnection } from "@/lib/deviceConnection";
+import { APP_HOME, APP_ROLE, APP_VARIANT } from "@/lib/appVariant";
 
 export default function App() {
-  const [path, setPath] = useState(window.location.pathname);
-  useEffect(() => {
-    const update = () => setPath(window.location.pathname);
-    window.addEventListener("popstate", update);
-    return () => window.removeEventListener("popstate", update);
-  }, []);
-
   const connection = getDeviceConnection();
-  if (!connection || path === "/connect") return <ConnectDevice />;
-  if (path === "/register") return <PosRegisterGate />;
-  if (path === "/kitchen") return <PosKitchen />;
-  if (path === "/display") return <PosDisplay />;
-  if (path === "/shifts") return <PosShifts />;
-  if (path === "/printer") return <PrinterSettings />;
+  if (!connection || window.location.pathname === "/connect") return <ConnectDevice />;
 
-  const destination = connection.role === "register" ? "/register" : connection.role === "kitchen" ? "/kitchen" : "/display";
-  window.history.replaceState({}, "", destination);
-  return connection.role === "register" ? <PosRegisterGate /> : connection.role === "kitchen" ? <PosKitchen /> : <PosDisplay />;
+  if (connection.role !== APP_ROLE) {
+    window.localStorage.removeItem("customli.pos.deviceConnection.v1");
+    window.history.replaceState({}, "", "/connect");
+    return <ConnectDevice />;
+  }
+
+  if (window.location.pathname !== APP_HOME) {
+    window.history.replaceState({}, "", APP_HOME);
+  }
+
+  if (APP_VARIANT === "kds") return <PosKitchen />;
+  if (APP_VARIANT === "cds") return <PosDisplay />;
+  return <PosRegisterGate />;
 }
