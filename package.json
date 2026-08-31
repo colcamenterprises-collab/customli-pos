@@ -6,11 +6,17 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
+    "build:pos": "VITE_CUSTOMLI_APP_VARIANT=pos npm run build",
+    "build:kds": "VITE_CUSTOMLI_APP_VARIANT=kds npm run build",
+    "build:cds": "VITE_CUSTOMLI_APP_VARIANT=cds npm run build",
     "preview": "vite preview --host 0.0.0.0",
     "android:add": "npx cap add android",
     "android:prepare": "node scripts/prepare-android.mjs",
     "android:sync": "npx cap sync android",
-    "android:build:debug": "npm run build && npm run android:prepare && cd android && ./gradlew assembleDebug"
+    "android:build:debug": "CUSTOMLI_APP_VARIANT=pos VITE_CUSTOMLI_APP_VARIANT=pos CUSTOMLI_CLEAN_ANDROID=1 npm run build && CUSTOMLI_APP_VARIANT=pos CUSTOMLI_CLEAN_ANDROID=1 npm run android:prepare && cd android && ./gradlew assembleDebug",
+    "android:build:pos": "CUSTOMLI_APP_VARIANT=pos VITE_CUSTOMLI_APP_VARIANT=pos CUSTOMLI_CLEAN_ANDROID=1 npm run build && CUSTOMLI_APP_VARIANT=pos CUSTOMLI_CLEAN_ANDROID=1 npm run android:prepare && cd android && ./gradlew assembleDebug",
+    "android:build:kds": "CUSTOMLI_APP_VARIANT=kds VITE_CUSTOMLI_APP_VARIANT=kds CUSTOMLI_CLEAN_ANDROID=1 npm run build && CUSTOMLI_APP_VARIANT=kds CUSTOMLI_CLEAN_ANDROID=1 npm run android:prepare && cd android && ./gradlew assembleDebug",
+    "android:build:cds": "CUSTOMLI_APP_VARIANT=cds VITE_CUSTOMLI_APP_VARIANT=cds CUSTOMLI_CLEAN_ANDROID=1 npm run build && CUSTOMLI_APP_VARIANT=cds CUSTOMLI_CLEAN_ANDROID=1 npm run android:prepare && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
     "@capacitor/core": "^7.4.3",
