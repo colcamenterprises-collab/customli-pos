@@ -4,6 +4,20 @@ import { isManagerTestMode } from "@/lib/testMode";
 const ENV_API_BASE = String(import.meta.env.VITE_CUSTOMLI_API_BASE || "").replace(/\/$/, "");
 const FLAG = "__customliApiBaseInstalled";
 
+function apiPath(input: RequestInfo | URL) {
+  if (typeof input === "string" && input.startsWith("/api/")) return input.split("?")[0];
+  if (input instanceof URL && input.pathname.startsWith("/api/")) return input.pathname;
+  if (input instanceof Request) {
+    try {
+      const url = new URL(input.url, window.location.origin);
+      return url.pathname.startsWith("/api/") ? url.pathname : "";
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
 function sandboxPath(pathname: string) {
   if (!isManagerTestMode()) return pathname;
   if (pathname === "/api/pos-shifts/current") return "/api/pos-shifts/test/current";
@@ -27,8 +41,7 @@ function sandboxPath(pathname: string) {
     return `/api/pos-shifts/test/orders/${id}/print-event`;
   }
   if (/^\/api\/(?:pos|ordering)\/orders\/[^/]+\/status$/.test(pathname)) {
-    const parts = pathname.split("/");
-    const id = parts[4];
+    const id = pathname.split("/")[4];
     return `/api/pos-shifts/test/orders/${id}/status`;
   }
   if (pathname === "/api/ordering/kitchen/orders") return "/api/pos-shifts/test/kitchen/orders";
@@ -44,6 +57,10 @@ function requestTarget(input: RequestInfo | URL) {
   if (input instanceof URL && input.pathname.startsWith("/api/") && input.origin === window.location.origin) {
     return new URL(`${sandboxPath(input.pathname)}${input.search}`, apiBase);
   }
+  if (input instanceof Request) {
+    const url = new URL(input.url, window.location.origin);
+    if (url.pathname.startsWith("/api/") && url.origin === window.location.origin) return new URL(`${sandboxPath(url.pathname)}${url.search}`, apiBase);
+  }
   return null;
 }
 
@@ -53,6 +70,12 @@ export function installApiBase() {
   globalWindow[FLAG] = true;
   const originalFetch = window.fetch.bind(window);
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (isManagerTestMode() && apiPath(input) === "/api/pos/discounts/manage") {
+      return Promise.resolve(new Response(JSON.stringify({ ok: false, error: "Discount management is disabled in Test Mode to protect live settings." }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      }));
+    }
     const target = requestTarget(input);
     if (!target) return originalFetch(input, init);
     const connection = getDeviceConnection();
