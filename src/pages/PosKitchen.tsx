@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { nativePrinterAvailable, nativeSpeak } from "@/lib/thermalPrinter";
 
 const ageMinutes = (createdAt: string) =>
   Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000));
@@ -8,12 +9,19 @@ const displayTicket = (order: any) => {
   return String(order.order_number || "");
 };
 const spokenTicket = (ticket: string) => ticket.split("").join(" ");
-const speakReady = (ticket: string) => {
+const speakReady = async (ticket: string) => {
+  const text = `Order ${spokenTicket(ticket)} is ready for collection`;
+  if (nativePrinterAvailable()) {
+    try {
+      await nativeSpeak(text, "en-US");
+      return;
+    } catch {
+      // Fall back to WebView speech if Android TTS is not ready yet.
+    }
+  }
   if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(
-    `Order ${spokenTicket(ticket)} is ready for collection`,
-  );
+  const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "en-US";
   window.speechSynthesis.speak(utterance);
 };
@@ -131,7 +139,7 @@ export default function PosKitchen() {
 
   const markReady = async (order: any) => {
     if (await updateStatus(order, "ready")) {
-      if (isCollectionOrder(order)) speakReady(displayTicket(order));
+      if (isCollectionOrder(order)) void speakReady(displayTicket(order));
     }
   };
 

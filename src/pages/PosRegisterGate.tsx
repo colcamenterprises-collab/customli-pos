@@ -45,6 +45,7 @@ export default function PosRegisterGate() {
           <h1 className="mt-2 text-3xl font-black">Could not verify the shift</h1>
           <p className="mt-3 text-sm text-zinc-500">{error}</p>
           <button onClick={() => { setLoading(true); void loadShift(); }} className="mt-6 w-full rounded-xl bg-black px-5 py-4 font-black text-white">Retry</button>
+          <a href="/printer" className="mt-4 block text-sm font-bold text-zinc-500">Printer & receipt setup</a>
         </section>
       </main>
     );
@@ -59,11 +60,16 @@ export default function PosRegisterGate() {
           <h1 className="mt-2 text-3xl font-black">Open a shift before taking orders</h1>
           <p className="mt-3 text-sm text-zinc-500">Sales are blocked at both the register and the server until a cashier shift is open.</p>
           <a href="/shifts" className="mt-7 block w-full rounded-xl bg-[#ffd400] px-5 py-4 text-lg font-black text-black shadow-[0_6px_0_#d7ae00]">Open Shift</a>
-          <a href="/" className="mt-4 block text-sm font-bold text-zinc-500">Back to dashboard</a>
+          <a href="/printer" className="mt-4 block w-full rounded-xl border border-zinc-300 px-5 py-3 text-sm font-black text-zinc-700">Printer & Receipt Setup</a>
         </section>
       </main>
     );
   }
 
-  return <PosRegister />;
+  return (
+    <>
+      <PosRegister />
+      <a href="/printer" className="fixed bottom-4 left-4 z-[90] rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-black text-zinc-700 shadow-lg">Printer Setup</a>
+    </>
+  );
 }

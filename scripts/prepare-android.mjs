@@ -7,6 +7,8 @@ const androidDir = resolve(root, "android");
 const variant = String(process.env.CUSTOMLI_APP_VARIANT || "pos").toLowerCase();
 const packageName = variant === "kds" ? "io.customli.kds" : variant === "cds" ? "io.customli.cds" : "io.customli.pos";
 const appName = variant === "kds" ? "Customli KDS" : variant === "cds" ? "Customli CDS" : "Customli POS";
+const appVersionName = "1.0.0";
+const appVersionCode = 10000;
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32", env: process.env });
@@ -46,6 +48,14 @@ for (const permission of permissions) {
 }
 writeFileSync(manifestPath, manifest);
 
+const gradlePath = resolve(androidDir, "app/build.gradle");
+if (existsSync(gradlePath)) {
+  let gradle = readFileSync(gradlePath, "utf8");
+  gradle = gradle.replace(/versionCode\s+\d+/, `versionCode ${appVersionCode}`);
+  gradle = gradle.replace(/versionName\s+["'][^"']+["']/, `versionName "${appVersionName}"`);
+  writeFileSync(gradlePath, gradle);
+}
+
 const stringsPath = resolve(androidDir, "app/src/main/res/values/strings.xml");
 if (existsSync(stringsPath)) {
   let strings = readFileSync(stringsPath, "utf8");
@@ -56,4 +66,4 @@ if (existsSync(stringsPath)) {
   writeFileSync(stringsPath, strings);
 }
 
-console.log(`${appName} Android project prepared (${packageName}) with native printer/TTS bridge.`);
+console.log(`${appName} v${appVersionName} Android project prepared (${packageName}) with native printer/TTS bridge.`);
