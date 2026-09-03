@@ -198,6 +198,11 @@ const formatOrderDateTime = (createdAt?: string) => {
 const itemLines = (payload: ReceiptPayload) => {
   const lines: string[] = [];
   for (const line of payload.lines) {
+    if (line.isSetComponent) {
+      lines.push(`    [ ] ${line.quantity} x ${line.name}`.slice(0, WIDTH));
+      continue;
+    }
+
     const amount = money(line.quantity * line.unitPrice);
     const left = `[ ] ${line.quantity} x ${line.name}`;
     if (left.length + amount.length + 1 <= WIDTH) lines.push(pair(left, amount));
@@ -221,7 +226,7 @@ function buildReceiptCopy(payload: ReceiptPayload, copyLabel: "CASHIER COPY" | "
   const identity = orderIdentity(payload);
   const stamp = formatOrderDateTime(payload.createdAt);
   const items = itemLines(payload);
-  const totals = [pair("SUBTOTAL", money(payload.subtotal))];
+  const totals = [pair("PAYMENT", String(payload.paymentMethod || "UNKNOWN").toUpperCase()), pair("SUBTOTAL", money(payload.subtotal))];
   if (payload.discount > 0) totals.push(pair("DISCOUNT", `-${money(payload.discount)}`));
   totals.push(pair("TOTAL", money(payload.total)));
   if (payload.cashReceived !== undefined) totals.push(pair("CASH", money(payload.cashReceived)));
