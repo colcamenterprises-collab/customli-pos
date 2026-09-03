@@ -1,4 +1,5 @@
 import PosRegisterGate from "@/pages/PosRegisterGate";
+import PosShifts from "@/pages/PosShifts";
 import PosKitchen from "@/pages/PosKitchen";
 import PosDisplay from "@/pages/PosDisplay";
 import ConnectDevice from "@/pages/ConnectDevice";
@@ -7,7 +8,9 @@ import { APP_HOME, APP_ROLE, APP_VARIANT } from "@/lib/appVariant";
 
 export default function App() {
   const connection = getDeviceConnection();
-  if (!connection || window.location.pathname === "/connect") return <ConnectDevice />;
+  const path = window.location.pathname;
+
+  if (!connection || path === "/connect") return <ConnectDevice />;
 
   if (connection.role !== APP_ROLE) {
     window.localStorage.removeItem("customli.pos.deviceConnection.v1");
@@ -15,11 +18,16 @@ export default function App() {
     return <ConnectDevice />;
   }
 
-  if (window.location.pathname !== APP_HOME) {
+  if (APP_VARIANT === "pos") {
+    if (path === "/shifts") return <PosShifts />;
+    if (path !== "/register") window.history.replaceState({}, "", "/register");
+    return <PosRegisterGate />;
+  }
+
+  if (path !== APP_HOME) {
     window.history.replaceState({}, "", APP_HOME);
   }
 
   if (APP_VARIANT === "kds") return <PosKitchen />;
-  if (APP_VARIANT === "cds") return <PosDisplay />;
-  return <PosRegisterGate />;
+  return <PosDisplay />;
 }
