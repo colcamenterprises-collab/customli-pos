@@ -1,4 +1,4 @@
-import { SBB_MEMBERSHIP_QR_URL, SBB_RECEIPT_BRAND_NAME, SBB_RECEIPT_WEBSITE } from "@/lib/receiptBranding";
+import { readPosPrinterSettings } from "@/lib/posPrinterSettings";
 
 export type NativePrinterDevice = {
   name: string;
@@ -145,6 +145,21 @@ export type ReceiptPayload = {
   }[];
 };
 
+type ReceiptBranding = {
+  businessName: string;
+  location: string;
+  website: string;
+  membershipQrUrl: string;
+  logoRaster?: Uint8Array;
+};
+
+const DEFAULT_BRANDING: ReceiptBranding = {
+  businessName: "SMASH BROTHERS BURGERS",
+  location: "Rawai, Phuket",
+  website: "SMASHBROSBURGERS.COM",
+  membershipQrUrl: "https://smashbrosburgers.com/membership",
+};
+
 const money = (value: number) => `THB ${Number(value || 0).toFixed(2)}`;
 const WIDTH = 32;
 const RULE = "--------------------------------";
@@ -168,6 +183,61 @@ const qrCode = (value: string) => {
     cmd(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30),
   );
 };
+
+async function receiptLogoRaster(dataUrl: string, paperWidth: 58 | 80) {
+  if (!dataUrl || typeof document === "undefined") return undefined;
+  const image = new Image();
+  image.src = dataUrl;
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Receipt logo could not be loaded"));
+  });
+
+  const maxWidth = paperWidth === 80 ? 260 : 180;
+  const scale = Math.min(1, maxWidth / Math.max(1, image.naturalWidth));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return undefined;
+  context.fillStyle = "white";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+  const pixels = context.getImageData(0, 0, width, height);
+
+  // Logos supplied for screens often have a dark background. A thermal printer
+  // should print the mark, not a solid black rectangle, so invert automatically
+  // when the image border is predominantly dark.
+  const borderSamples: number[] = [];
+  const sample = (x: number, y: number) => {
+    const index = (y * width + x) * 4;
+    borderSamples.push((pixels.data[index] + pixels.data[index + 1] + pixels.data[index + 2]) / 3);
+  };
+  const stepX = Math.max(1, Math.floor(width / 12));
+  const stepY = Math.max(1, Math.floor(height / 12));
+  for (let x = 0; x < width; x += stepX) { sample(x, 0); sample(x, height - 1); }
+  for (let y = 0; y < height; y += stepY) { sample(0, y); sample(width - 1, y); }
+  const invert = borderSamples.reduce((sum, value) => sum + value, 0) / Math.max(1, borderSamples.length) < 110;
+
+  const bytesPerRow = Math.ceil(width / 8);
+  const raster = new Uint8Array(bytesPerRow * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const alpha = pixels.data[index + 3] / 255;
+      let luminance = (pixels.data[index] * 0.299 + pixels.data[index + 1] * 0.587 + pixels.data[index + 2] * 0.114) * alpha + 255 * (1 - alpha);
+      if (invert) luminance = 255 - luminance;
+      if (luminance < 150) raster[y * bytesPerRow + Math.floor(x / 8)] |= 0x80 >> (x % 8);
+    }
+  }
+
+  return concat(
+    cmd(0x1d, 0x76, 0x30, 0x00, bytesPerRow & 0xff, (bytesPerRow >> 8) & 0xff, height & 0xff, (height >> 8) & 0xff),
+    raster,
+  );
+}
 
 const orderIdentity = (payload: ReceiptPayload) => {
   const isGrab = String(payload.orderMode || payload.paymentMethod).toLowerCase() === "grab";
@@ -222,7 +292,7 @@ const itemLines = (payload: ReceiptPayload) => {
   return lines;
 };
 
-function buildReceiptCopy(payload: ReceiptPayload, copyLabel: "CASHIER COPY" | "CUSTOMER COPY", cut = true) {
+function buildReceiptCopy(payload: ReceiptPayload, copyLabel: "CASHIER COPY" | "CUSTOMER COPY", cut: boolean, branding: ReceiptBranding) {
   const identity = orderIdentity(payload);
   const stamp = formatOrderDateTime(payload.createdAt);
   const items = itemLines(payload);
@@ -235,10 +305,12 @@ function buildReceiptCopy(payload: ReceiptPayload, copyLabel: "CASHIER COPY" | "
   return concat(
     INIT,
     ALIGN_CENTER,
+    branding.logoRaster || new Uint8Array(),
+    branding.logoRaster ? text("\n") : new Uint8Array(),
     BOLD_ON,
-    text(`${SBB_RECEIPT_BRAND_NAME}\n`),
+    text(`${branding.businessName}\n`),
     BOLD_OFF,
-    text("Rawai, Phuket\n\n"),
+    branding.location ? text(`${branding.location}\n\n`) : text("\n"),
     BOLD_ON,
     text(`${copyLabel}\n\n`),
     BOLD_OFF,
@@ -260,21 +332,17 @@ function buildReceiptCopy(payload: ReceiptPayload, copyLabel: "CASHIER COPY" | "
     text("PACKED [ ]\n"),
     BOLD_OFF,
     ALIGN_CENTER,
-    text("\nScan to join Smash Club\n"),
-    qrCode(SBB_MEMBERSHIP_QR_URL),
-    text("\n"),
-    BOLD_ON,
-    text(`${SBB_RECEIPT_WEBSITE}\n`),
-    BOLD_OFF,
+    branding.membershipQrUrl ? concat(text("\nScan to join membership\n"), qrCode(branding.membershipQrUrl), text("\n")) : text("\n"),
+    branding.website ? concat(BOLD_ON, text(`${branding.website.toUpperCase()}\n`), BOLD_OFF) : new Uint8Array(),
     text(copyLabel === "CUSTOMER COPY" ? "THANK YOU\n" : "\n"),
     cut ? FEED_AND_CUT : text("\n\n"),
   );
 }
 
-export function buildReceiptEscPos(payload: ReceiptPayload) {
+export function buildReceiptEscPos(payload: ReceiptPayload, branding: ReceiptBranding = DEFAULT_BRANDING) {
   return concat(
-    buildReceiptCopy(payload, "CASHIER COPY", true),
-    buildReceiptCopy(payload, "CUSTOMER COPY", true),
+    buildReceiptCopy(payload, "CASHIER COPY", true, branding),
+    buildReceiptCopy(payload, "CUSTOMER COPY", true, branding),
   );
 }
 
@@ -284,7 +352,21 @@ export async function printReceiptNative(payload: ReceiptPayload, openDrawer = f
   if (!status.connected) status = await reconnectSavedPrinter();
   if (!status.connected) return { attempted: true, ok: false, message: "Printer is not connected" };
 
-  const bytes = buildReceiptEscPos(payload);
+  const settings = readPosPrinterSettings();
+  let logoRaster: Uint8Array | undefined;
+  try {
+    logoRaster = await receiptLogoRaster(settings.receiptLogoDataUrl, settings.paperWidth);
+  } catch {
+    logoRaster = undefined;
+  }
+  const branding: ReceiptBranding = {
+    businessName: settings.receiptBusinessName,
+    location: settings.receiptLocation,
+    website: settings.receiptWebsite,
+    membershipQrUrl: settings.membershipQrUrl,
+    logoRaster,
+  };
+  const bytes = buildReceiptEscPos(payload, branding);
   try {
     await printEscPosBytes(bytes);
   } catch (firstError) {
