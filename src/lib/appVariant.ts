@@ -2,6 +2,7 @@ export type AppVariant = "pos" | "kds" | "cds";
 
 const raw = String(import.meta.env.VITE_CUSTOMLI_APP_VARIANT || "pos").toLowerCase();
 
+export const APP_VERSION = "1.0.0";
 export const APP_VARIANT: AppVariant = raw === "kds" || raw === "cds" ? raw : "pos";
 
 export const APP_ROLE = APP_VARIANT === "kds" ? "kitchen" : APP_VARIANT === "cds" ? "display" : "register";
