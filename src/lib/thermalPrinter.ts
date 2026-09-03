@@ -1,3 +1,5 @@
+import { SBB_MEMBERSHIP_QR_URL, SBB_RECEIPT_BRAND_NAME, SBB_RECEIPT_WEBSITE } from "@/lib/receiptBranding";
+
 export type NativePrinterDevice = {
   name: string;
   address: string;
@@ -108,9 +110,23 @@ const concat = (...chunks: Uint8Array[]) => {
 };
 
 const text = (value: string) => enc.encode(value.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "?"));
+const cmd = (...values: number[]) => new Uint8Array(values);
+const INIT = cmd(0x1b, 0x40);
+const ALIGN_LEFT = cmd(0x1b, 0x61, 0x00);
+const ALIGN_CENTER = cmd(0x1b, 0x61, 0x01);
+const BOLD_ON = cmd(0x1b, 0x45, 0x01);
+const BOLD_OFF = cmd(0x1b, 0x45, 0x00);
+const SIZE_NORMAL = cmd(0x1d, 0x21, 0x00);
+const SIZE_DOUBLE = cmd(0x1d, 0x21, 0x11);
+const CUT = cmd(0x1d, 0x56, 0x00);
+const FEED_AND_CUT = concat(text("\n\n\n"), CUT);
 
 export type ReceiptPayload = {
   ticketNumber: string;
+  orderMode?: string;
+  grabOrderNumber?: string;
+  customerName?: string;
+  createdAt?: string;
   paymentMethod: string;
   subtotal: number;
   discount: number;
@@ -125,49 +141,135 @@ export type ReceiptPayload = {
     notes?: string;
     setUpgrade?: boolean;
     drinkName?: string;
+    isSetComponent?: boolean;
   }[];
 };
 
 const money = (value: number) => `THB ${Number(value || 0).toFixed(2)}`;
 const WIDTH = 32;
+const RULE = "--------------------------------";
+const HEAVY_RULE = "================================";
 const pair = (left: string, right: string) => {
   const r = right.slice(0, WIDTH);
   return `${left.slice(0, Math.max(1, WIDTH - r.length - 1)).padEnd(Math.max(1, WIDTH - r.length - 1))} ${r}`;
 };
 
-export function buildReceiptEscPos(payload: ReceiptPayload) {
-  const lines: string[] = [
-    "CUSTOMLI POS BURGERS",
-    "Rawai, Phuket",
-    "--------------------------------",
-    pair("ORDER", payload.ticketNumber),
-    pair("PAYMENT", payload.paymentMethod.toUpperCase()),
-    pair("DATE", new Date().toLocaleString("en-GB", { hour12: false })),
-    "--------------------------------",
-  ];
+const qrCode = (value: string) => {
+  const data = enc.encode(value);
+  const storeLength = data.length + 3;
+  const pL = storeLength & 0xff;
+  const pH = (storeLength >> 8) & 0xff;
+  return concat(
+    cmd(0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00),
+    cmd(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x05),
+    cmd(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31),
+    cmd(0x1d, 0x28, 0x6b, pL, pH, 0x31, 0x50, 0x30),
+    data,
+    cmd(0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30),
+  );
+};
 
+const orderIdentity = (payload: ReceiptPayload) => {
+  const isGrab = String(payload.orderMode || payload.paymentMethod).toLowerCase() === "grab";
+  if (!isGrab) return { label: "ORDER", value: payload.ticketNumber || "---", customer: "" };
+  const raw = String(payload.grabOrderNumber || "").trim().replace(/^GF[-\s]*/i, "");
+  return {
+    label: "GRAB",
+    value: raw ? `GF-${raw}` : payload.ticketNumber || "GRAB",
+    customer: String(payload.customerName || "").trim().toUpperCase(),
+  };
+};
+
+const formatOrderDateTime = (createdAt?: string) => {
+  const date = createdAt ? new Date(createdAt) : new Date();
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Bangkok",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find(part => part.type === type)?.value || "";
+  return { date: `${get("day")}/${get("month")}/${get("year")}`, time: `${get("hour")}:${get("minute")}` };
+};
+
+const itemLines = (payload: ReceiptPayload) => {
+  const lines: string[] = [];
   for (const line of payload.lines) {
-    lines.push(pair(`${line.quantity} x ${line.name}`, money(line.quantity * line.unitPrice)));
-    for (const modifier of line.modifiers || []) lines.push(`  + ${modifier.name} ${money(modifier.price)}`.slice(0, WIDTH));
-    if (line.setUpgrade) lines.push("  + SET UPGRADE");
-    if (line.drinkName) lines.push(`  + ${line.drinkName}`.slice(0, WIDTH));
-    if (line.notes) lines.push(`  NOTE: ${line.notes}`.slice(0, WIDTH));
+    const amount = money(line.quantity * line.unitPrice);
+    const left = `[ ] ${line.quantity} x ${line.name}`;
+    if (left.length + amount.length + 1 <= WIDTH) lines.push(pair(left, amount));
+    else {
+      lines.push(left.slice(0, WIDTH));
+      if (line.unitPrice > 0) lines.push(pair("", amount));
+    }
+    for (const modifier of line.modifiers || []) {
+      const modifierPrice = Number(modifier.price || 0);
+      const suffix = modifierPrice ? ` ${money(modifierPrice)}` : "";
+      lines.push(`    + ${modifier.name}${suffix}`.slice(0, WIDTH));
+    }
+    if (line.setUpgrade) lines.push("    + SET UPGRADE");
+    if (line.drinkName) lines.push(`    + ${line.drinkName}`.slice(0, WIDTH));
+    if (line.notes) lines.push(`    NOTE: ${line.notes}`.slice(0, WIDTH));
   }
+  return lines;
+};
 
-  lines.push("--------------------------------", pair("SUBTOTAL", money(payload.subtotal)));
-  if (payload.discount > 0) lines.push(pair("DISCOUNT", `-${money(payload.discount)}`));
-  lines.push(pair("TOTAL", money(payload.total)));
-  if (payload.cashReceived !== undefined) lines.push(pair("CASH", money(payload.cashReceived)));
-  if (payload.change !== undefined) lines.push(pair("CHANGE", money(payload.change)));
-  lines.push("--------------------------------", "THANK YOU", "", "", "");
+function buildReceiptCopy(payload: ReceiptPayload, copyLabel: "CASHIER COPY" | "CUSTOMER COPY", cut = true) {
+  const identity = orderIdentity(payload);
+  const stamp = formatOrderDateTime(payload.createdAt);
+  const items = itemLines(payload);
+  const totals = [pair("SUBTOTAL", money(payload.subtotal))];
+  if (payload.discount > 0) totals.push(pair("DISCOUNT", `-${money(payload.discount)}`));
+  totals.push(pair("TOTAL", money(payload.total)));
+  if (payload.cashReceived !== undefined) totals.push(pair("CASH", money(payload.cashReceived)));
+  if (payload.change !== undefined) totals.push(pair("CHANGE", money(payload.change)));
 
   return concat(
-    new Uint8Array([0x1b, 0x40]),
-    new Uint8Array([0x1b, 0x61, 0x01]),
-    text(lines[0] + "\n" + lines[1] + "\n"),
-    new Uint8Array([0x1b, 0x61, 0x00]),
-    text(lines.slice(2).join("\n") + "\n"),
-    new Uint8Array([0x1d, 0x56, 0x00]),
+    INIT,
+    ALIGN_CENTER,
+    BOLD_ON,
+    text(`${SBB_RECEIPT_BRAND_NAME}\n`),
+    BOLD_OFF,
+    text("Rawai, Phuket\n\n"),
+    BOLD_ON,
+    text(`${copyLabel}\n\n`),
+    BOLD_OFF,
+    text(`${identity.label}\n`),
+    SIZE_DOUBLE,
+    BOLD_ON,
+    text(`${identity.value}\n`),
+    SIZE_NORMAL,
+    identity.customer ? text(`${identity.customer}\n`) : text(""),
+    BOLD_OFF,
+    text(`${RULE}\n`),
+    ALIGN_LEFT,
+    text(items.join("\n") + "\n"),
+    text(`${RULE}\n`),
+    text(totals.join("\n") + "\n"),
+    text(pair(stamp.date, stamp.time) + "\n"),
+    text(`${HEAVY_RULE}\n`),
+    BOLD_ON,
+    text("PACKED [ ]\n"),
+    BOLD_OFF,
+    ALIGN_CENTER,
+    text("\nScan to join Smash Club\n"),
+    qrCode(SBB_MEMBERSHIP_QR_URL),
+    text("\n"),
+    BOLD_ON,
+    text(`${SBB_RECEIPT_WEBSITE}\n`),
+    BOLD_OFF,
+    text(copyLabel === "CUSTOMER COPY" ? "THANK YOU\n" : "\n"),
+    cut ? FEED_AND_CUT : text("\n\n"),
+  );
+}
+
+export function buildReceiptEscPos(payload: ReceiptPayload) {
+  return concat(
+    buildReceiptCopy(payload, "CASHIER COPY", true),
+    buildReceiptCopy(payload, "CUSTOMER COPY", true),
   );
 }
 
@@ -201,5 +303,5 @@ export async function printReceiptNative(payload: ReceiptPayload, openDrawer = f
   }
 
   if (openDrawer) await nativeOpenCashDrawer().catch(() => undefined);
-  return { attempted: true, ok: true, message: "Printed" };
+  return { attempted: true, ok: true, message: "Cashier and customer receipts printed" };
 }
