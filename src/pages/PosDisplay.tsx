@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState } from "react";
+import { nativePrinterAvailable, nativeSpeak } from "@/lib/thermalPrinter";
 
 const spokenTicket = (ticket: string) => ticket.split("").join(" ");
-const announce = (ticket: string) => {
+const announce = async (ticket: string) => {
+  const text = `Order ${spokenTicket(ticket)} is ready for collection`;
+  if (nativePrinterAvailable()) {
+    try {
+      await nativeSpeak(text, "en-US");
+      return;
+    } catch {
+      // Fall back to browser speech if Android TTS is not ready yet.
+    }
+  }
   if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(
-    `Order ${spokenTicket(ticket)} is ready for collection`,
-  );
+  const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "en-US";
   window.speechSynthesis.speak(utterance);
 };
@@ -36,7 +44,7 @@ export default function PosDisplay() {
           const number = String(ticket.ticket_number || "");
           if (number && !seen.current.has(number)) {
             seen.current.add(number);
-            announce(number);
+            void announce(number);
           }
         }
         for (const ticket of Array.from(seen.current)) {
