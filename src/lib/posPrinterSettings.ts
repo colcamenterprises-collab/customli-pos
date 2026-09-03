@@ -46,15 +46,15 @@ export function readPosPrinterSettings(): PosPrinterSettings {
           ? stored.receiptBusinessName.trim()
           : DEFAULT_POS_PRINTER_SETTINGS.receiptBusinessName,
       receiptLocation:
-        typeof stored?.receiptLocation === "string" && stored.receiptLocation.trim()
+        typeof stored?.receiptLocation === "string"
           ? stored.receiptLocation.trim()
           : DEFAULT_POS_PRINTER_SETTINGS.receiptLocation,
       receiptWebsite:
-        typeof stored?.receiptWebsite === "string" && stored.receiptWebsite.trim()
+        typeof stored?.receiptWebsite === "string"
           ? stored.receiptWebsite.trim()
           : DEFAULT_POS_PRINTER_SETTINGS.receiptWebsite,
       membershipQrUrl:
-        typeof stored?.membershipQrUrl === "string" && stored.membershipQrUrl.trim()
+        typeof stored?.membershipQrUrl === "string"
           ? stored.membershipQrUrl.trim()
           : DEFAULT_POS_PRINTER_SETTINGS.membershipQrUrl,
     };
