@@ -1,1 +1,0 @@
-Receipt implementation work is completed on a feature branch. This marker exists only to ensure the branch base includes the approved receipt-branding constants before formatter changes are applied.
