@@ -4,11 +4,10 @@ import { spawnSync } from "node:child_process";
 
 const root = process.cwd();
 const androidDir = resolve(root, "android");
-const variant = String(process.env.CUSTOMLI_APP_VARIANT || "pos").toLowerCase();
-const packageName = variant === "kds" ? "io.customli.kds" : variant === "cds" ? "io.customli.cds" : "io.customli.pos";
-const appName = variant === "kds" ? "Customli KDS" : variant === "cds" ? "Customli CDS" : "Customli POS";
-const appVersionName = "1.0.0";
-const appVersionCode = 10000;
+const packageName = "io.customli.pos";
+const appName = "Customli";
+const appVersionName = "1.1.0";
+const appVersionCode = 10100;
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32", env: process.env });
@@ -62,8 +61,8 @@ if (existsSync(stringsPath)) {
   strings = strings.replace(/<string name="app_name">[^<]*<\/string>/, `<string name="app_name">${appName}</string>`);
   strings = strings.replace(/<string name="title_activity_main">[^<]*<\/string>/, `<string name="title_activity_main">${appName}</string>`);
   strings = strings.replace(/<string name="package_name">[^<]*<\/string>/, `<string name="package_name">${packageName}</string>`);
-  strings = strings.replace(/<string name="custom_url_scheme">[^<]*<\/string>/, `<string name="custom_url_scheme">${packageName}</string>`);
+  strings = strings.replace(/<string name="custom_url_scheme">[^<]*<\/string>/, `<string name="custom_url_scheme">customli</string>`);
   writeFileSync(stringsPath, strings);
 }
 
-console.log(`${appName} v${appVersionName} Android project prepared (${packageName}) with native printer/TTS bridge.`);
+console.log(`${appName} v${appVersionName} Android project prepared (${packageName}). Back Office assigns POS/KDS/CDS role after pairing.`);
