@@ -1,12 +1,16 @@
-export type AppVariant = "pos" | "kds" | "cds";
+import type { DeviceRole } from "@/lib/deviceConnection";
 
-const raw = String(import.meta.env.VITE_CUSTOMLI_APP_VARIANT || "pos").toLowerCase();
+export const APP_VERSION = "1.1.0";
+export const APP_NAME = "Customli";
 
-export const APP_VERSION = "1.0.0";
-export const APP_VARIANT: AppVariant = raw === "kds" || raw === "cds" ? raw : "pos";
+export function homeForRole(role: DeviceRole) {
+  if (role === "kitchen") return "/kitchen";
+  if (role === "display") return "/display";
+  return "/register";
+}
 
-export const APP_ROLE = APP_VARIANT === "kds" ? "kitchen" : APP_VARIANT === "cds" ? "display" : "register";
-
-export const APP_NAME = APP_VARIANT === "kds" ? "Customli KDS" : APP_VARIANT === "cds" ? "Customli CDS" : "Customli POS";
-
-export const APP_HOME = APP_VARIANT === "kds" ? "/kitchen" : APP_VARIANT === "cds" ? "/display" : "/register";
+export function nameForRole(role: DeviceRole) {
+  if (role === "kitchen") return "Customli Kitchen Display";
+  if (role === "display") return "Customli Customer Display";
+  return "Customli POS";
+}
