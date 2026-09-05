@@ -12,9 +12,6 @@ permissions:
 jobs:
   web-build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        variant: [pos, kds, cds]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,17 +20,12 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Type-check and build ${{ matrix.variant }}
-        env:
-          VITE_CUSTOMLI_APP_VARIANT: ${{ matrix.variant }}
+      - name: Type-check and build universal Customli app
         run: npm run build
 
   android-debug-apk:
     runs-on: ubuntu-latest
     needs: web-build
-    strategy:
-      matrix:
-        variant: [pos, kds, cds]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,21 +38,18 @@ jobs:
           java-version: "21"
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Build web assets
-        env:
-          VITE_CUSTOMLI_APP_VARIANT: ${{ matrix.variant }}
+      - name: Build universal web assets
         run: npm run build
-      - name: Prepare Android project
+      - name: Prepare universal Android project
         env:
-          CUSTOMLI_APP_VARIANT: ${{ matrix.variant }}
           CUSTOMLI_CLEAN_ANDROID: "1"
         run: npm run android:prepare
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug
-      - name: Upload debug APK
+      - name: Upload universal Customli Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: customli-${{ matrix.variant }}-debug-apk
+          name: customli-android-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

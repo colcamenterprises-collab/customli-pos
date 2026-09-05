@@ -1,14 +1,10 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-const variant = String(process.env.CUSTOMLI_APP_VARIANT || "pos").toLowerCase();
-const app = variant === "kds"
-  ? { appId: "io.customli.kds", appName: "Customli KDS" }
-  : variant === "cds"
-    ? { appId: "io.customli.cds", appName: "Customli CDS" }
-    : { appId: "io.customli.pos", appName: "Customli POS" };
-
 const config: CapacitorConfig = {
-  ...app,
+  // Keep the established POS package id so existing register installations can
+  // upgrade in place. Role is now assigned by Back Office after pairing.
+  appId: "io.customli.pos",
+  appName: "Customli",
   webDir: "dist",
   android: { allowMixedContent: false },
   plugins: {

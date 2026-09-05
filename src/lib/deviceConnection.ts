@@ -3,8 +3,10 @@ export type DeviceRole = "register" | "kitchen" | "display";
 export type DeviceConnection = {
   apiBase: string;
   deviceToken: string;
+  deviceId: string;
   businessName: string;
   deviceName: string;
+  locationName?: string | null;
   role: DeviceRole;
 };
 
@@ -19,8 +21,10 @@ export function getDeviceConnection(): DeviceConnection | null {
     return {
       apiBase: String(parsed.apiBase).replace(/\/$/, ""),
       deviceToken: String(parsed.deviceToken),
+      deviceId: String(parsed.deviceId || ""),
       businessName: String(parsed.businessName || "Connected business"),
-      deviceName: String(parsed.deviceName || "POS device"),
+      deviceName: String(parsed.deviceName || "Customli device"),
+      locationName: parsed.locationName == null ? null : String(parsed.locationName),
       role: parsed.role as DeviceRole,
     };
   } catch {
