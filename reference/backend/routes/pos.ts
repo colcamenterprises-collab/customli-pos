@@ -274,12 +274,8 @@ router.post("/orders", staffDevice, async (req, res) => {
 
   const grabOrderDigits = String(input.grab_order_number || "").slice(0, 64).replace(/\D/g, "");
   const grabOrderNumber = mode === "grab" && grabOrderDigits ? `GF-${grabOrderDigits}` : "";
-  const customerName = String(input.customer_name || "").trim().slice(0, 120);
-  const customerMobile = String(input.customer_mobile || "").trim().slice(0, 30);
   if (mode === "grab") {
     if (!grabOrderDigits) return fail(res, "Enter the Grab order number");
-    if (!customerName) return fail(res, "Grab customer name is required");
-    if (!/^[+0-9][0-9 ()-]{5,29}$/.test(customerMobile)) return fail(res, "Enter the Grab customer mobile number");
   }
 
   const client = await db().connect();
@@ -291,7 +287,7 @@ router.post("/orders", staffDevice, async (req, res) => {
     const order = (await client.query(
       `INSERT INTO ordering_orders(channel, order_mode, dining_type, order_notes, status, payment_status, payment_method, grab_order_number, customer_name, customer_mobile)
        VALUES($1,$2,$3,$4,'submitted','paid',$5,$6,$7,$8) RETURNING *`,
-      [mode === "grab" ? "grab" : "pos_direct", mode, input.dining_type || null, input.order_notes || null, input.payment_method, mode === "grab" ? grabOrderNumber : null, mode === "grab" ? customerName : null, mode === "grab" ? customerMobile : null],
+      [mode === "grab" ? "grab" : "pos_direct", mode, input.dining_type || null, input.order_notes || null, input.payment_method, mode === "grab" ? grabOrderNumber : null, null, null],
     )).rows[0];
     const numericOrderNumber = Number(order.order_number || 1);
     const displayTicket = ticketNumber(((numericOrderNumber - 1) % DISPLAY_TICKET_MAX) + 1);
