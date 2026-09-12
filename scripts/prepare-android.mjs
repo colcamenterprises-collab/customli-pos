@@ -6,8 +6,8 @@ const root = process.cwd();
 const androidDir = resolve(root, "android");
 const packageName = "io.customli.pos";
 const appName = "Customli";
-const appVersionName = "1.1.1";
-const appVersionCode = 10101;
+const appVersionName = "1.1.2";
+const appVersionCode = 10102;
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32", env: process.env });

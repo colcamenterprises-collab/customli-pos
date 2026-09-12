@@ -72,9 +72,14 @@ export async function getNativePrinterStatus() {
   return plugin().getStatus();
 }
 
+export async function releaseNativePrinter() {
+  if (!nativePrinterAvailable()) return { connected: false };
+  return plugin().disconnect();
+}
+
 export async function disconnectNativePrinter() {
   savePrinterAddress("");
-  return plugin().disconnect();
+  return releaseNativePrinter();
 }
 
 export async function nativeTestPrint() {
@@ -349,8 +354,13 @@ export function buildReceiptEscPos(payload: ReceiptPayload, branding: ReceiptBra
 export async function printReceiptNative(payload: ReceiptPayload, openDrawer = false) {
   if (!nativePrinterAvailable()) return { attempted: false, ok: false, message: "Native printer unavailable" };
   let status = await getNativePrinterStatus().catch(() => ({ connected: false }));
-  if (!status.connected) status = await reconnectSavedPrinter();
-  if (!status.connected) return { attempted: true, ok: false, message: "Printer is not connected" };
+  if (!status.connected) {
+    for (let attempt = 0; attempt < 3 && !status.connected; attempt += 1) {
+      status = await reconnectSavedPrinter();
+      if (!status.connected && attempt < 2) await new Promise(resolve => setTimeout(resolve, 650 * (attempt + 1)));
+    }
+  }
+  if (!status.connected) return { attempted: true, ok: false, message: "Printer is busy or unavailable. Grab Merchant may be using it; retry in a moment." };
 
   const settings = readPosPrinterSettings();
   let logoRaster: Uint8Array | undefined;
@@ -368,27 +378,33 @@ export async function printReceiptNative(payload: ReceiptPayload, openDrawer = f
   };
   const bytes = buildReceiptEscPos(payload, branding);
   try {
-    await printEscPosBytes(bytes);
-  } catch (firstError) {
-    const reconnected = await reconnectSavedPrinter();
-    if (!reconnected.connected) {
-      return {
-        attempted: true,
-        ok: false,
-        message: firstError instanceof Error ? firstError.message : "Printing failed and printer could not reconnect",
-      };
-    }
     try {
       await printEscPosBytes(bytes);
-    } catch (retryError) {
-      return {
-        attempted: true,
-        ok: false,
-        message: retryError instanceof Error ? retryError.message : "Printing failed after reconnect",
-      };
+    } catch (firstError) {
+      await releaseNativePrinter().catch(() => undefined);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const reconnected = await reconnectSavedPrinter();
+      if (!reconnected.connected) {
+        return {
+          attempted: true,
+          ok: false,
+          message: firstError instanceof Error ? firstError.message : "Printing failed and printer could not reconnect",
+        };
+      }
+      try {
+        await printEscPosBytes(bytes);
+      } catch (retryError) {
+        return {
+          attempted: true,
+          ok: false,
+          message: retryError instanceof Error ? retryError.message : "Printing failed after reconnect",
+        };
+      }
     }
-  }
 
-  if (openDrawer) await nativeOpenCashDrawer().catch(() => undefined);
-  return { attempted: true, ok: true, message: "Cashier and customer receipts printed" };
+    if (openDrawer) await nativeOpenCashDrawer().catch(() => undefined);
+    return { attempted: true, ok: true, message: "Cashier and customer receipts printed; printer released for Grab Merchant" };
+  } finally {
+    await releaseNativePrinter().catch(() => undefined);
+  }
 }
